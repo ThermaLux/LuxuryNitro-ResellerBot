@@ -9,7 +9,7 @@ import re
 
 import utils
 from utils import config
-import thermalux
+import luxurynitro
 
 __version__ = 'v1.2.0.1'
 
@@ -30,7 +30,7 @@ async def latest_version_check():
     return app_latest_ver_link, app_latest_ver
 
 global_credits = 0
-global_orders: dict[str, thermalux.Order] = {}
+global_orders: dict[str, luxurynitro.Order] = {}
 
 f = open('data/queue.txt', 'r')
 queue_message_id = f.read()
@@ -53,8 +53,8 @@ error_symbol = '`🔴`'
 success_color = 0x4dd156
 success_symbol = '`🟢`'
 
-api: thermalux.Client = None
-api_user: thermalux.User = None
+api: luxurynitro.Client = None
+api_user: luxurynitro.User = None
 
 class log:
     @staticmethod
@@ -129,7 +129,7 @@ async def purchase(interaction: discord.Interaction, amount: int, token: str, an
         try:
             order = await api.create_order(amount, token, anonymous=anonymous, reason=f"RS: {interaction.user.id}")
         
-        except thermalux.errors.APIError as exc:
+        except luxurynitro.errors.APIError as exc:
             if "credits" in exc.message.lower():
                 await resp_error(interaction, utils.lang.cmd_purchase_contact_owner, followup=True)
                 
@@ -142,7 +142,7 @@ async def purchase(interaction: discord.Interaction, amount: int, token: str, an
             else:
                 await resp_error(interaction, utils.lang.process(utils.lang.general_error, {'error': exc.message}), followup=True)
         
-        except thermalux.errors.RetryTimeout:
+        except luxurynitro.errors.RetryTimeout:
             await resp_error(interaction, utils.lang.retry_later_error, followup=True)
         
         else:
@@ -184,12 +184,12 @@ async def cancel(interaction: discord.Interaction, order_id: int):
         try:
             refunded = await api.delete_order(order_id=order_id)
         
-        except thermalux.errors.APIError as exc:
+        except luxurynitro.errors.APIError as exc:
             await resp_error(interaction, utils.lang.process(utils.lang.general_error, {'error': exc.message}), followup=True)
             if "complete" in exc.message.lower():
                 db.edit('orders', {'completed': 1}, {'api_id': order_id})
                 
-        except thermalux.errors.RetryTimeout:
+        except luxurynitro.errors.RetryTimeout:
             await resp_error(interaction, utils.lang.retry_later_error, followup=True)
         
         else:
@@ -357,9 +357,9 @@ async def updateEmbedLoop():
     await client.wait_until_ready()
     try:
         vps_stats = await api.get_vps_stats()
-    except thermalux.errors.APIError as exc:
+    except luxurynitro.errors.APIError as exc:
         await log.warn(f"{utils.lang.embed_fetch_error} {exc.message}")
-    except thermalux.errors.RetryTimeout as exc:
+    except luxurynitro.errors.RetryTimeout as exc:
         await log.warn(f"{utils.lang.embed_fetch_error} {exc.message}" + "\n- ".join(f"`{e}`" for e in exc.errors))
     else:
         current_time = int(time.time())
@@ -407,9 +407,9 @@ async def updateEmbedLoop():
     try:
         user = await api.get_user()
         queue = await api.get_queue()
-    except thermalux.errors.APIError as exc:
+    except luxurynitro.errors.APIError as exc:
         await log.warn(f"{utils.lang.embed_fetch_error} {exc.message}")
-    except thermalux.errors.RetryTimeout as exc:
+    except luxurynitro.errors.RetryTimeout as exc:
         await log.warn(f"{utils.lang.embed_fetch_error} {exc.message}" + "\n- ".join(f"`{e}`" for e in exc.errors))
     else:
         current_time = int(time.time())
@@ -511,13 +511,13 @@ async def startup():
         print("-------------------")
         exit()
     
-    print("\nConnecting to ThermaLux API...")
-    api = thermalux.Client(config.api_key)
+    print("\nConnecting to LuxuryNitro API...")
+    api = luxurynitro.Client(config.api_key)
     try: api_user = await api.get_user()
-    except thermalux.errors.APIError as exc:
-        print(f"Error connecting to ThermaLux API ({api._base_url}): {exc.message}")
+    except luxurynitro.errors.APIError as exc:
+        print(f"Error connecting to LuxuryNitro API ({api._base_url}): {exc.message}")
         if exc.response.status_code == 401:
-            print("It seems like your ThermaLux API key is invalid. You can get a new one at https://dash.luxurynitro.com/settings")
+            print("It seems like your LuxuryNitro API key is invalid. You can get a new one at https://dash.luxurynitro.com/settings")
             print("Make sure to paste the full key, including the 'api_' part.")
         exit()
     global_credits = api_user.credits
