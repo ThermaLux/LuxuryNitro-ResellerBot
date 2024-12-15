@@ -1,5 +1,5 @@
 import httpx
-import asyncio
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Union
@@ -10,17 +10,17 @@ from utils import config
 request_method_map = {
     "sellix": "GET",
     "sellapp": "GET",
-
+    'sellpass': 'GET'
 }
 request_url_map = {
     "sellix": "https://dev.sellix.io/v1/orders/{}",
     "sellapp": "https://sell.app/api/v1/invoices/{}",
-
+    'sellpass': 'https://dev.sellpass.io/self/' + str(config.claiming.merchant) + '/invoices/{}'
 }
 request_auth_map = {
     "sellix": "Bearer {}",
     "sellapp": "Bearer {}",
-
+    "sellpass": "Bearer {}"
 }
 request_store_map = {
     "sellix": "X-Sellix-Merchant",
@@ -35,35 +35,29 @@ class order_data:
     paid: bool
 
 
-async def get_order(order_id, retry=0) -> tuple[bool, Union[str, order_data]]:
+def get_order(order_id, retry=0) -> tuple[bool, Union[str, order_data]]:
     headers = {
         'Authorization': request_auth_map[config.claiming.mode].format(config.claiming.api_key),
         "Accept": "application/json"
     }
-    if config.claiming.merchant and config.claiming.mode = 'sellix' || 'sellapp':
+    if config.claiming.merchant and config.claiming.mode != 'sellpass':
         headers[request_store_map[config.claiming.mode]] = config.claiming.merchant
     
     try:
-        async with httpx.AsyncClient() as rclient:
-            res = await rclient.request(
-                method=request_method_map[config.claiming.mode],
-                url=request_url_map[config.claiming.mode].format(order_id),
-                headers=headers,
-                json=None
-            )
+        res = httpx.request(
+            method=request_method_map[config.claiming.mode],
+            url=request_url_map[config.claiming.mode].format(order_id),
+            headers=headers,
+            json=None
+        )
     except:
         if retry > 2: return False, 'max_retries'
-        await asyncio.sleep(1)
+        time.sleep(1)
         return get_order(order_id, retry+1)
     else:
-        if config.claiming.mode == 'sellix':
-            # why must you do this sellix
-            try: res.status_code = res.json()['status']
-            except: pass
-
         if res.status_code == 429:
             if retry > 2: return False, 'max_retries'
-            await asyncio.sleep(2.5)
+            time.sleep(2.5)
             return get_order(order_id, retry+1)
         
         elif res.status_code in (401, 403):
@@ -77,7 +71,7 @@ async def get_order(order_id, retry=0) -> tuple[bool, Union[str, order_data]]:
                     product_id=str(resjson['data']['order']['product_id']),
                     order_time=resjson['data']['order']['created_at'],
                     quantity=resjson['data']['order']['quantity'],
-                    paid=resjson['data']['order']['status'] == 'COMPLETED'
+                    paid=resjson['data']['status'] == 'COMPLETED'
                 )
             
             elif config.claiming.mode == 'sellapp':                
@@ -96,7 +90,25 @@ async def get_order(order_id, retry=0) -> tuple[bool, Union[str, order_data]]:
                     ),
                     quantity=quantity,
                     paid=resjson['data']['status']['status']['status'] == 'COMPLETED'
-                )
+                )
+            
+            elif config.claiming.mode == 'sellpass':
+                quantity = 0
+                for product in resjson['data']['partInvoices']:
+                    if str(product['product']['id']) == config.claiming.product:
+                        quantity += product['quantity']
+                
+                return True, order_data(
+                    product_id=str(config.claiming.product) if quantity > 0 else '0',
+                    order_time=int(
+                        datetime.strptime(resjson['data']['timeline'][0]['time'], "%Y-%m-%dT%H:%M:%S.%fZ")
+                            .replace(tzinfo=timezone.utc)
+                            .timestamp()
+                    ),
+                    quantity=quantity,
+                    paid=resjson['data']['status']== 3
+                )
+            
             else:
                 raise Exception
         
@@ -106,7 +118,7 @@ async def get_order(order_id, retry=0) -> tuple[bool, Union[str, order_data]]:
 
 async def confirm_order(order_id, discord_id):
     "Returns `tuple[bool, Union[str, order_data], int, str]`. str will be returned on False, order_data will be returned on True. int is the user's new balance (if it changed)."
-    success, data = await get_order(order_id)
+    success, data = get_order(order_id)
     if success:
         if data.order_time > config.claiming.start_time:
             if data.product_id == config.claiming.product:
