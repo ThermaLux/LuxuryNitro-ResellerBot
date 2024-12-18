@@ -6,6 +6,7 @@ import httpx
 import asyncio
 import base64
 import re
+from urllib.parse import urlparse
 
 import utils
 from utils import config
@@ -333,7 +334,14 @@ async def orders(interaction: discord.Interaction, page: int = 1, all_orders: bo
 @tree.command(description=utils.lang.cmd_buy_desc, name=utils.lang.cmd_buy)
 @app_commands.describe()
 async def buy(interaction: discord.Interaction):
-    await resp_success(interaction, f"[{config.purchase_link}]({config.purchase_link})")
+    
+    full_purchase_link = config.purchase_link
+    parsed_url = urlparse(full_purchase_link)
+
+    # You can Change This to show the full purchase link just replace {shortened_display_link} with {full_purchase_link} and it will work
+    shortened_display_link = parsed_url.netloc + " Click Here To Purchase"
+    markdown_link = f"[{shortened_display_link}]({full_purchase_link})"
+    await resp_success(interaction, markdown_link)
 
 @tree.command(description=utils.lang.cmd_token_desc, name=utils.lang.cmd_token)
 @app_commands.describe()
