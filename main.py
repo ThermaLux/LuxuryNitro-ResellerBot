@@ -12,7 +12,7 @@ import utils
 from utils import config
 import luxurynitro
 
-__version__ = 'v1.2.0.1'
+__version__ = 'v1.2.0.2'
 
 last_update_ping = int(time.time())
 
