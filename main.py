@@ -7,14 +7,30 @@ import asyncio
 import base64
 import re
 from urllib.parse import urlparse
-
 import utils
 from utils import config
 import luxurynitro
+import logging
 
-__version__ = 'v1.2.0.2'
+__version__ = 'v1.2.0.3'
 
 last_update_ping = int(time.time())
+
+logger = logging.getLogger('luxury_nitro_claims')
+logger.setLevel(logging.DEBUG)
+
+file_handler = logging.FileHandler('nitro_claims.log', encoding='utf-8')
+file_handler.setLevel(logging.DEBUG)
+file_formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+file_handler.setFormatter(file_formatter)
+logger.addHandler(file_handler)
+
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+console_handler.setFormatter(console_formatter)
+logger.addHandler(console_handler)
+
 
 async def latest_version_check():
     try:
@@ -60,19 +76,23 @@ api_user: luxurynitro.User = None
 class log:
     @staticmethod
     async def error(message):
+        logger.error(message)
         timenow = int(time.time())
         return await logs_channel.send(f"<t:{timenow}:d> <t:{timenow}:t> `🔴` {message}", suppress_embeds=True)
     @staticmethod
     async def success(message):
+        logger.info(message)
         timenow = int(time.time())
         return await logs_channel.send(f"<t:{timenow}:d> <t:{timenow}:t> `🟢` {message}", suppress_embeds=True)
     @staticmethod
     async def warn(message):
+        logger.warning(message)
         print(message)
         timenow = int(time.time())
         return await logs_channel.send(f"<t:{timenow}:d> <t:{timenow}:t> `🟡` {message}", suppress_embeds=True)
     @staticmethod
     async def info(message):
+        logger.info(message)
         timenow = int(time.time())
         return await logs_channel.send(f"<t:{timenow}:d> <t:{timenow}:t> `🔵` {message}", suppress_embeds=True)
 
@@ -134,11 +154,14 @@ async def purchase(interaction: discord.Interaction, amount: int, token: str, an
             if "credits" in exc.message.lower():
                 await resp_error(interaction, utils.lang.cmd_purchase_contact_owner, followup=True)
                 
+                admin_mentions = ''.join(f' <@{x}>' for x in config.discord_admins)
+                user_name = f"{interaction.user.name}#{interaction.user.discriminator}"
+                
                 await log.error(utils.lang.process(utils.lang.cmd_purchase_contact_owner_log, {
-                    'user': interaction.user.mention,
+                    'user': f"<@{interaction.user.id}> ({user_name})",
                     'amount': amount,
                     'global_credits': global_credits
-                }) + ''.join(f' <@{x}>' for x in config.discord_admins))
+                }) + admin_mentions)
             
             else:
                 await resp_error(interaction, utils.lang.process(utils.lang.general_error, {'error': exc.message}), followup=True)
@@ -156,8 +179,9 @@ async def purchase(interaction: discord.Interaction, amount: int, token: str, an
             
             global_credits -= amount
             
+            user_name = f"{interaction.user.name}#{interaction.user.discriminator}"
             await log.success(utils.lang.process(utils.lang.cmd_purchase_success_log, {
-                'user': interaction.user.mention,
+                'user': f"<@{interaction.user.id}> ({user_name})",
                 'amount': amount,
                 'order': order.id,
                 'credit_before': credit_count,
@@ -202,7 +226,8 @@ async def cancel(interaction: discord.Interaction, order_id: int):
             
             global_credits += refunded
             
-            await log.success(utils.lang.process(utils.lang.cmd_cancel_success_log, {'user': interaction.user.mention, 'order': order_id, 'global_credits': global_credits}))
+            user_name = f"{interaction.user.name}#{interaction.user.discriminator}"
+            await log.success(utils.lang.process(utils.lang.cmd_cancel_success_log, {'user': f"<@{interaction.user.id}> ({user_name})", 'order': order_id, 'global_credits': global_credits}))
     
     db.close()
 
@@ -241,6 +266,18 @@ async def award(interaction: discord.Interaction, user: discord.Member, amount: 
         db.insert('credits', [user.id, amount, reason, new_balance])
         db.close()
         await resp_success(interaction, utils.lang.process(utils.lang.cmd_award_success, {'user': user.mention, 'credits': new_balance}))
+        
+        admin_name = f"{interaction.user.name}#{interaction.user.discriminator}"
+        user_name = f"{user.name}#{user.discriminator}"
+
+        await log.success(utils.lang.process(utils.lang.cmd_award_success_log, {
+            'admin': f"<@{interaction.user.id}> ({admin_name})",
+            'user': f"<@{user.id}> ({user_name})",
+            'amount': amount,
+            'reason': reason,
+            'credit_before': credit_count,
+            'credit_after': new_balance
+        }))
 
 async def get_orders_description(user_id, all_orders, page=1):
     db = utils.database.Connection()
@@ -336,11 +373,12 @@ async def orders(interaction: discord.Interaction, page: int = 1, all_orders: bo
 async def buy(interaction: discord.Interaction):
     
     full_purchase_link = config.purchase_link
+    
     parsed_url = urlparse(full_purchase_link)
-
-    # You can Change This to show the full purchase link just replace {shortened_display_link} with {full_purchase_link} and it will work
     shortened_display_link = parsed_url.netloc + " Click Here To Purchase"
+    
     markdown_link = f"[{shortened_display_link}]({full_purchase_link})"
+    
     await resp_success(interaction, markdown_link)
 
 @tree.command(description=utils.lang.cmd_token_desc, name=utils.lang.cmd_token)
@@ -356,7 +394,7 @@ async def on_ready():
     
     await tree.sync()
     await updateEmbedLoop.start()
-    
+
 
 @tasks.loop(seconds=30)
 async def updateEmbedLoop():
@@ -423,11 +461,12 @@ async def updateEmbedLoop():
         current_time = int(time.time())
         download_url, version_name = await latest_version_check()
         if version_name != __version__ and last_update_ping + 86400 < current_time:
+            admin_mentions = ''.join(f' <@{x}>' for x in config.discord_admins)
             await log.warn(utils.lang.process(utils.lang.new_update_available_log, {
                 "version": version_name,
                 "current_version": __version__,
                 "download_url": download_url
-            }) + ''.join(f' <@{x}>' for x in config.discord_admins))
+            }) + admin_mentions)
             last_update_ping = current_time
         
         db = utils.database.Connection()
@@ -448,7 +487,7 @@ async def updateEmbedLoop():
                 
                 if order.status.in_queue:  
                     order_to_queue[order.id] = int(order.status.status_text.split('/')[0].replace('(', ''))
-                else: # has to be on status=1 (claiming)
+                else:
                     order_to_queue[order.id] = 0
             
             global_orders[order.id] = order
@@ -536,5 +575,7 @@ async def startup():
     print("Logging into Discord Bot...")
     discord.utils.setup_logging(root=False)
     await client.start(config.discord_token, reconnect=True)
+    logger.info("Discord bot logged in sucessfully.")
+    
 
 asyncio.run(startup())
