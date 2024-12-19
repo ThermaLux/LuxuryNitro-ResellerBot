@@ -59,6 +59,8 @@ cmd_award_arg_user = _lang.get('cmd_award_arg_user', "Recipient of credits.")
 cmd_award_arg_amount = _lang.get('cmd_award_arg_amount', "Number of credits to give/take. (use a negative to take)")
 cmd_award_arg_reason = _lang.get('cmd_award_arg_reason', "Reason for doing this.")
 cmd_award_success = _lang.get('cmd_award_success', "{user} now has {credits} credits.")
+cmd_award_success_log = "{admin} awarded {amount} credits to {user} for reason: {reason} (Credits: {credit_before} -> {credit_after})"
+
 
 cmd_orders = _lang.get('cmd_orders', "orders")
 cmd_orders_desc = _lang.get('cmd_orders_desc', "Lists all of your orders.")
