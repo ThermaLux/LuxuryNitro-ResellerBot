@@ -3,6 +3,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Union
+import json
 
 import utils
 from utils import config
@@ -65,13 +66,13 @@ def get_order(order_id, retry=0) -> tuple[bool, Union[str, order_data]]:
         
         elif res.status_code == 200:
             resjson = res.json()
-
+            
             if config.claiming.mode == 'sellix':
                 return True, order_data(
                     product_id=str(resjson['data']['order']['product_id']),
                     order_time=resjson['data']['order']['created_at'],
                     quantity=resjson['data']['order']['quantity'],
-                    paid=resjson['data']['status'] == 'COMPLETED'
+                    paid=resjson['data']['order']['status'] == 'COMPLETED'  # Changed this line
                 )
             
             elif config.claiming.mode == 'sellapp':                
@@ -106,7 +107,7 @@ def get_order(order_id, retry=0) -> tuple[bool, Union[str, order_data]]:
                             .timestamp()
                     ),
                     quantity=quantity,
-                    paid=resjson['data']['status']== 3
+                    paid=resjson['data']['status'] == 3
                 )
             
             else:
